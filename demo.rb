@@ -13,12 +13,6 @@ class Master
     spawn_server
 
     stuff
-
-    s,r = @socks.values.first
-    cs, cr = UNIXSocket.pair(:STREAM)
-    s.send_io(cr)
-    setup = {arguments: ['console']}.to_json
-    cs.puts setup
   end
 
   def stuff
@@ -58,7 +52,7 @@ class Acceptor
           $stderr.reopen(terminal)
           # ARGV.replace(arguments)
 
-          exec("ls")
+          exec("htop")
         end
         Process.detach(child)
         terminal.close
