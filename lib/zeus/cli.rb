@@ -71,24 +71,3 @@ module Zeus
   end
 end
 
-
-__END__
-module Zeus
-  class CLI < Thor
-
-    default_task :help
-    class_option "no-color", type: :boolean, banner: "Disable colorization in output"
-    class_option "verbose",  type: :boolean, banner: "Enable verbose output mode", aliases: "-V"
-
-    def help(cli = nil)
-      case cli
-      when nil then command = "zeus"
-      else command = "zeus-#{cli}"
-      end
-    end
-
-
-
-
-  end
-end
