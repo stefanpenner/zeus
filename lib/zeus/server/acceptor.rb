@@ -5,8 +5,10 @@ require 'socket'
 module Zeus
   class Server
     class Acceptor
-      def initialize(master)
-        @master = master
+
+      attr_accessor :name, :command, :action
+      def initialize(server)
+        @master = server.master
       end
 
       def register_with_master(pid)
@@ -20,7 +22,7 @@ module Zeus
       end
 
       def registration_data(pid)
-        {pid: pid, commands: ['console', 'c'], description: "start a rails console"}.to_json
+        {pid: pid, commands: [command], description: "start a rails console"}.to_json
       end
 
       def run
@@ -46,3 +48,46 @@ module Zeus
     end
   end
 end
+
+__END__
+def run
+  @pid = fork {
+    $0 = "zeus acceptor: #{@name}"
+    pid = Process.pid
+    $w_pids.puts "#{pid}:#{Process.ppid}\n"
+    $LOADED_FEATURES.each do |f|
+      $w_features.puts "#{pid}:#{f}\n"
+    end
+    puts "\x1b[35m[zeus] starting acceptor `#{@name}`\x1b[0m"
+    trap("INT") {
+      puts "\x1b[35m[zeus] killing acceptor `#{@name}`\x1b[0m"
+      exit 0
+    }
+
+    File.unlink(@socket) rescue nil
+    server = UNIXServer.new(@socket)
+    loop do
+      ActiveRecord::Base.clear_all_connections! # TODO : refactor
+      client = server.accept
+      child = fork do
+        ActiveRecord::Base.establish_connection # TODO :refactor
+        ActiveSupport::DescendantsTracker.clear
+        ActiveSupport::Dependencies.clear
+
+        terminal = client.recv_io
+        arguments = JSON.load(client.gets.strip)
+
+        client << $$ << "\n"
+        $stdin.reopen(terminal)
+        $stdout.reopen(terminal)
+        $stderr.reopen(terminal)
+        ARGV.replace(arguments)
+
+        @action.call
+      end
+      Process.detach(child)
+      client.close
+    end
+  }
+end
+

@@ -13,23 +13,22 @@ module Zeus
   class Server
 
     def self.define!(&b)
-      @@spec = Zeus::DSL::Evaluator.new.instance_eval(&b)
+      @@definition = Zeus::DSL::Evaluator.new.instance_eval(&b)
     end
 
+    attr_reader :master
     def initialize
       @file_monitor = FileMonitor.new(&method(:dependency_did_change))
       @master = Master.new
       @process_tree_monitor = ProcessTreeMonitor.new
       # TODO: deprecate Zeus::Server.define! maybe. We can do that better...
-      @spec = @@spec
+      @plan = @@definition.to_domain_object
+      puts plan.inspect
     end
 
-    # we need to keep track of:
-    #
-    # 1. Acceptors listening for each command
-    # 2. Processes watching each file
-    # 3. Process hierarchy
-    # 4. ???
+    def dependency_did_change(file)
+      @process_tree_monitor.kill_nodes_with_feature(file)
+    end
 
     def run
       $0 = "zeus master"
@@ -41,15 +40,9 @@ module Zeus
 
       $r_pids, $w_pids = IO.pipe
       $w_pids.sync = true
-    end
 
-    def dependency_did_change(file)
-      @process_tree_monitor.kill_nodes_with_feature(file)
-    end
-
-    def self.run
-
-      @@root_stage_pid = @@root.run
+      # boot the actual app
+      @definition_runner.run
 
       loop do
         @file_monitor.process_events
@@ -87,58 +80,10 @@ module Zeus
 
 
 
-=begin
     class Acceptor
-      attr_reader :pid
-      def initialize(name, socket, &b)
-        @name = name
-        @socket = socket
-        @action = b
-      end
 
-      def run
-        @pid = fork {
-          $0 = "zeus acceptor: #{@name}"
-          pid = Process.pid
-          $w_pids.puts "#{pid}:#{Process.ppid}\n"
-          $LOADED_FEATURES.each do |f|
-            $w_features.puts "#{pid}:#{f}\n"
-          end
-          puts "\x1b[35m[zeus] starting acceptor `#{@name}`\x1b[0m"
-          trap("INT") {
-            puts "\x1b[35m[zeus] killing acceptor `#{@name}`\x1b[0m"
-            exit 0
-          }
-
-          File.unlink(@socket) rescue nil
-          server = UNIXServer.new(@socket)
-          loop do
-            ActiveRecord::Base.clear_all_connections! # TODO : refactor
-            client = server.accept
-            child = fork do
-              ActiveRecord::Base.establish_connection # TODO :refactor
-              ActiveSupport::DescendantsTracker.clear
-              ActiveSupport::Dependencies.clear
-
-              terminal = client.recv_io
-              arguments = JSON.load(client.gets.strip)
-
-              client << $$ << "\n"
-              $stdin.reopen(terminal)
-              $stdout.reopen(terminal)
-              $stderr.reopen(terminal)
-              ARGV.replace(arguments)
-
-              @action.call
-            end
-            Process.detach(child)
-            client.close
-          end
-        }
-      end
 
     end
-=end
 
   end
 end

@@ -1,22 +1,11 @@
 module Zeus
   class Server
     class Stage
+
+      attr_accessor :name, :stages, :actions
       attr_reader :pid
-      def initialize(name)
-        @name = name
-        @stages, @actions = [], []
-      end
-
-      def action(&b)
-        @actions << b
-      end
-
-      def stage(name, &b)
-        @stages << Stage.new(name).tap { |s| s.instance_eval(&b) }
-      end
-
-      def acceptor(name, socket, &b)
-        @stages << Acceptor.new(name, socket, &b)
+      def initialize(server)
+        @server = server
       end
 
       # There are a few things we want to accomplish:
