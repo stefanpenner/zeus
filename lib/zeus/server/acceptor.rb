@@ -1,27 +1,29 @@
 require 'json'
 require 'socket'
 
-# See Zeus::Server::Master for relevant documentation
+# See Zeus::Server::ClientHandler for relevant documentation
 module Zeus
   class Server
     class Acceptor
 
       attr_accessor :name, :command, :action
       def initialize(server)
-        @master = server.master
+        @client_handler = server.client_handler
+        @registration_monitor = server.acceptor_registration_monitor
       end
 
-      def register_with_master(pid)
+      def register_with_client_handler(pid)
+        puts "OMG"
         a, b = Socket.pair(:UNIX, :STREAM)
-        @s_master = UNIXSocket.for_fd(a.fileno)
-        @s_acceptor = UNIXSocket.for_fd(b.fileno)
+        @s_client_handler = UNIXSocket.for_fd(a.fileno)
+        @s_acceptor       = UNIXSocket.for_fd(b.fileno)
 
         @s_acceptor.puts registration_data(pid)
 
         puts ">>>"
-        puts @master.acceptor_registration_socket.inspect
-        puts @s_master.inspect
-        @master.acceptor_registration_socket.send_io(@s_master)
+        puts @registration_monitor.acceptor_registration_socket.inspect
+        puts @s_client_handler.inspect
+        @registration_monitor.acceptor_registration_socket.send_io(@s_client_handler)
       end
 
       def registration_data(pid)
@@ -29,8 +31,9 @@ module Zeus
       end
 
       def run
+        puts "RUNNING ACCEPTOR"
         fork {
-          register_with_master($$)
+          register_with_client_handler($$)
           loop do
             terminal = @s_acceptor.recv_io
             arguments = JSON.parse(@s_acceptor.readline.chomp)
