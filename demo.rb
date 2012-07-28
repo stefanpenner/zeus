@@ -16,10 +16,11 @@ class Master
       client = server.accept
       child = fork do
         client_terminal = client.recv_io
-        arguments = JSON.load(client.gets.strip)
+        arguments = client.readline.chomp
         pid = @socks.keys.first
         s, r = @socks.values.first
         s.send_io(client_terminal)
+        s.puts arguments
         pid = s.readline.chomp.to_i
         client << {pid: pid}.to_json << "\n"
       end
@@ -42,12 +43,14 @@ class Acceptor
     fork {
       loop do
         terminal = @recv.recv_io
+        data = JSON.parse(@recv.readline.chomp)
+        arguments = data['arguments']
         child = fork do
           @recv << $$ << "\n"
           $stdin.reopen(terminal)
           $stdout.reopen(terminal)
           $stderr.reopen(terminal)
-          # ARGV.replace(arguments)
+          ARGV.replace(arguments)
 
           exec("htop")
         end
