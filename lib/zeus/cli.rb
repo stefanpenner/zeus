@@ -85,7 +85,7 @@ module Zeus
           "in the project root. You can run `zeus init` to generate a config file.")
         exit 1
       end
-      Zeus::Server.run
+      Zeus::Server.new.run
     end
 
     desc "version", "Print zeus's version information"
@@ -96,6 +96,7 @@ module Zeus
 
     begin
       require './.zeus.rb'
+=begin TODO: reenable
       Zeus::Server.acceptor_names.each do |name|
         desc name, "#{name} task defined in .zeus.rb"
         define_method(name) {
@@ -103,6 +104,7 @@ module Zeus
           Zeus::Client.run
         }
       end
+=end
     rescue LoadError
     end
 

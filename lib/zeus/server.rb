@@ -7,6 +7,7 @@ require 'zeus/process'
 require 'zeus/dsl'
 require 'zeus/server/file_monitor'
 require 'zeus/server/master'
+require 'zeus/server/process_tree_monitor'
 require 'zeus/server/acceptor'
 
 module Zeus
@@ -22,8 +23,7 @@ module Zeus
       @master = Master.new
       @process_tree_monitor = ProcessTreeMonitor.new
       # TODO: deprecate Zeus::Server.define! maybe. We can do that better...
-      @plan = @@definition.to_domain_object
-      puts plan.inspect
+      @plan = @@definition.to_domain_object(self)
     end
 
     def dependency_did_change(file)
@@ -42,7 +42,7 @@ module Zeus
       $w_pids.sync = true
 
       # boot the actual app
-      @definition_runner.run
+      @plan.run
 
       loop do
         @file_monitor.process_events
@@ -62,13 +62,13 @@ module Zeus
 
     def handle_pid_message(data)
       data =~ /(\d+):(\d+)/
-      pid, ppid = $1.to_i, $2.to_i
+        pid, ppid = $1.to_i, $2.to_i
       @process_tree_monitor.process_has_parent(pid, ppid)
     end
 
     def handle_feature_message(data)
       data =~ /(\d+):(.*)/
-      pid, file = $1.to_i, $2
+        pid, file = $1.to_i, $2
       @process_tree_monitor.process_has_feature(pid, file)
       @file_monitor.watch(file)
     end
@@ -76,13 +76,6 @@ module Zeus
     def self.pid_has_file(pid, file)
       @@files[file] ||= []
       @@files[file] << pid
-    end
-
-
-
-    class Acceptor
-
-
     end
 
   end

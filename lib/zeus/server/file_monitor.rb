@@ -11,7 +11,7 @@ module Zeus
         @queue = KQueue::Queue.new
         @watched_files = {}
         @deleted_files = []
-        @callback = callback
+        @change_callback = change_callback
       end
 
       def process_events
@@ -29,7 +29,7 @@ module Zeus
       private
 
       def file_did_change(event)
-        Zeus.ui.log("Dependency change at #{event.watcher.path}")
+        Zeus.ui.info("Dependency change at #{event.watcher.path}")
         resubscribe_deleted_file(event) if event.flags.include?(:delete)
         @change_callback.call(event.watcher.path)
       end

@@ -1,3 +1,6 @@
+require 'zeus/server/stage'
+require 'zeus/server/acceptor'
+
 module Zeus
   module DSL
 
@@ -18,7 +21,7 @@ module Zeus
       end
 
       def to_domain_object(server)
-        Zeus::Server::Stage.new.tap do |stage|
+        Zeus::Server::Acceptor.new(server).tap do |stage|
           stage.name = @name
           stage.command = @command
           stage.action = @action
@@ -37,18 +40,21 @@ module Zeus
 
       def action(&b)
         @actions << b
+        self
       end
 
       def stage(name, &b)
         @stages << DSL::Stage.new(name).tap { |s| s.instance_eval(&b) }
+        self
       end
 
       def acceptor(name, socket, &b)
         @stages << DSL::Acceptor.new(name, socket, &b)
+        self
       end
 
       def to_domain_object(server)
-        Zeus::Server::Stage.new.tap do |stage|
+        Zeus::Server::Stage.new(server).tap do |stage|
           stage.name = @name
           stage.stages = @stages.map { |stage| stage.to_domain_object(server) }
           stage.actions = @actions
