@@ -18,17 +18,21 @@ class Master
 
   def listen
     begin
-      server = UNIXServer.new(SERVER_SOCK)
-      server.listen(10)
-      at_exit { server.close ; File.unlink(SERVER_SOCK) }
-    rescue Errno::EADDRINUSE
-      # Zeus.ui.error "Zeus appears to be already running in this project. If not, remove .zeus.sock and try again."
-    end
-    loop do
-      rs, = IO.select([server, @reg_master])
-      next unless rs
-      rs.include?(server) and handle_server_connection(server)
-      rs.include?(@reg_master) and handle_registration
+      begin
+        server = UNIXServer.new(SERVER_SOCK)
+        server.listen(10)
+      rescue Errno::EADDRINUSE
+        # Zeus.ui.error "Zeus appears to be already running in this project. If not, remove .zeus.sock and try again."
+      end
+      loop do
+        rs, = IO.select([server, @reg_master])
+        next unless rs
+        rs.include?(server)      and handle_server_connection(server)
+        rs.include?(@reg_master) and handle_registration
+      end
+    ensure
+      server.close
+      File.unlink(SERVER_SOCK)
     end
   end
 
@@ -41,9 +45,7 @@ class Master
 
   def handle_server_connection(server)
     s_client = server.accept
-    fork do
-      handshake_client_to_acceptor(s_client)
-    end
+    fork { handshake_client_to_acceptor(s_client) }
   end
 
   # client    master    acceptor
