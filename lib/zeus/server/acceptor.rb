@@ -18,8 +18,9 @@ module Zeus
 
         @s_acceptor.puts registration_data(pid)
 
-        puts @master.acceptor_registration_socket
+        puts ">>>"
         puts @master.acceptor_registration_socket.inspect
+        puts @s_master.inspect
         @master.acceptor_registration_socket.send_io(@s_master)
       end
 

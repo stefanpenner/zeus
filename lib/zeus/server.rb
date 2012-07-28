@@ -6,7 +6,7 @@ require 'rb-kqueue'
 require 'zeus/process'
 require 'zeus/dsl'
 require 'zeus/server/file_monitor'
-require 'zeus/server/master'
+require 'zeus/server/client_handler'
 require 'zeus/server/process_tree_monitor'
 require 'zeus/server/acceptor'
 
@@ -19,9 +19,12 @@ module Zeus
 
     attr_reader :master
     def initialize
-      @file_monitor = FileMonitor.new(&method(:dependency_did_change))
+      @file_monitor                  = FileMonitor.new(&method(:dependency_did_change))
+      @acceptor_registration_monitor = AcceptorRegistrationMonitor.new
+      @process_tree_monitor          = ProcessTreeMonitor.new
+      @client_handler                = ClientHandler.new
+
       @master = Master.new
-      @process_tree_monitor = ProcessTreeMonitor.new
       # TODO: deprecate Zeus::Server.define! maybe. We can do that better...
       @plan = @@definition.to_domain_object(self)
     end
@@ -47,13 +50,18 @@ module Zeus
       loop do
         @file_monitor.process_events
 
+
         # TODO: It would be really nice if we could put the queue poller in the select somehow.
         #   --investigate kqueue. Is this possible?
-        rs, _, _ = IO.select([$r_features, $r_pids], [], [], 1)
+        rs, _, _ = IO.select([$r_pids, $r_features, @acceptor_registration_monitor.datasource, @client_handler.datasource], [], [], 1)
         rs.each do |r|
           case r
           when $r_pids     ; handle_pid_message(r.readline)
           when $r_features ; handle_feature_message(r.readline)
+          when @acceptor_registration_monitor.datasource
+            @acceptor_registration_monitor.on_datasource_event
+          when @client_handler.datasource
+            @client_handler.on_datasource_event
           end
         end if rs
       end
