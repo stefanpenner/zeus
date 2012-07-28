@@ -14,7 +14,6 @@ class Master
     @socks = {}
     spawn_acceptor
     listen
-    Process.waitall
   end
 
   def listen
@@ -33,8 +32,6 @@ class Master
     end
   end
 
-  # master   acceptor
-  #    <---------     | socket
   def handle_registration
     io = @reg_master.recv_io
     pid = io.readline.chomp.to_i
@@ -73,7 +70,6 @@ class Master
   end
 
   def find_acceptor_sock(command)
-    puts @socks.inspect
     # TODO lookup command
     @socks.values.first
   end
@@ -86,15 +82,6 @@ class Master
     @socks[pid] = [s,r]
   end
 
-  # Problem: we have to pass stuff into the acceptor.
-  # It should be able to register itself with the master.
-  # How do we accomplish this?
-  #
-  # 1. Initialize a global socket in the master process
-  # 2. when Acceptor spawns, it initializes its own internal socket
-  # 3. It sends the sockets to the global thing
-  # 4. It sends a message on the socket pair indicating who it is.
-  #
   def spawn_acceptor
     Acceptor.new(self).run
   end
