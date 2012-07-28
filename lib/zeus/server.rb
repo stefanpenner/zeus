@@ -2,10 +2,25 @@ require 'json'
 require 'socket'
 
 require 'rb-kqueue'
+
 require 'zeus/process'
+require 'zeus/server/file_monitor'
+require 'zeus/server/master'
+require 'zeus/server/acceptor'
 
 module Zeus
   module Server
+
+    def self.run
+      file_monitor = FileMonitor.new(&method(:dependency_did_change))
+      master = Master.new
+    end
+
+    def self.dependency_did_change(file_path)
+      killall_with_file(file_path)
+    end
+
+
     def self.define!(&b)
       @@root = Stage.new("(root)")
       @@root.instance_eval(&b)
@@ -20,31 +35,6 @@ module Zeus
     def self.killall_with_file(file)
       pids = @@files[file]
       @@process_tree.kill_nodes_with_feature(file)
-    end
-
-    TARGET_FD_LIMIT = 8192
-
-    def self.configure_number_of_file_descriptors
-      limit = Process.getrlimit(Process::RLIMIT_NOFILE)
-      if limit[0] < TARGET_FD_LIMIT && limit[1] >= TARGET_FD_LIMIT
-        Process.setrlimit(Process::RLIMIT_NOFILE, TARGET_FD_LIMIT)
-      else
-        puts "\x1b[33m[zeus] Warning: increase the max number of file descriptors. If you have a large project, this max cause a crash in about 10 seconds.\x1b[0m"
-      end
-    end
-
-    def self.notify(event)
-      if event.flags.include?(:delete)
-        # file was deleted, so we need to close and reopen it.
-        event.watcher.disable!
-        begin
-          @@queue.watch_file(event.watcher.path, :write, :extend, :rename, :delete, &method(:notify))
-        rescue Errno::ENOENT
-          lost_files << event.watcher.path
-        end
-      end
-      puts "\x1b[37m[zeus] dependency change: #{event.watcher.path}\x1b[0m"
-      killall_with_file(event.watcher.path)
     end
 
     def self.run
@@ -62,13 +52,11 @@ module Zeus
       @@process_tree = ProcessTree.new
       @@root_stage_pid = @@root.run
 
-      @@queue = KQueue::Queue.new
-
       lost_files = []
 
       @@file_watchers = {}
       loop do
-        @@queue.poll
+        @file_monitor.process_events
 
         # TODO: It would be really nice if we could put the queue poller in the select somehow.
         #   --investigate kqueue. Is this possible?
