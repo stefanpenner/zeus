@@ -1,11 +1,19 @@
 module Zeus
   module DSL
+
+    class Evaluator
+      def stage(name, &b)
+        stage = DSL::Stage.new(name)
+        stage.instance_eval(&b)
+      end
+    end
+
     class Acceptor
 
-      attr_reader :pid, :name, :socket, :action
-      def initialize(name, socket, &b)
+      attr_reader :pid, :name, :command, :action
+      def initialize(name, command, &b)
         @name = name
-        @socket = socket
+        @command = command
         @action = b
       end
 
@@ -24,11 +32,11 @@ module Zeus
       end
 
       def stage(name, &b)
-        @stages << Stage.new(name).tap { |s| s.instance_eval(&b) }
+        @stages << DSL::Stage.new(name).tap { |s| s.instance_eval(&b) }
       end
 
       def acceptor(name, socket, &b)
-        @stages << Acceptor.new(name, socket, &b)
+        @stages << DSL::Acceptor.new(name, socket, &b)
       end
 
     end

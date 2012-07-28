@@ -4,6 +4,7 @@ require 'socket'
 require 'rb-kqueue'
 
 require 'zeus/process'
+require 'zeus/dsl'
 require 'zeus/server/file_monitor'
 require 'zeus/server/master'
 require 'zeus/server/acceptor'
@@ -11,39 +12,27 @@ require 'zeus/server/acceptor'
 module Zeus
   class Server
 
+    def self.define!(&b)
+      @@spec = Zeus::DSL::Evaluator.new.instance_eval(&b)
+    end
+
     def initialize
       @file_monitor = FileMonitor.new(&method(:dependency_did_change))
       @master = Master.new
+      @process_tree_monitor = ProcessTreeMonitor.new
+      # TODO: deprecate Zeus::Server.define! maybe. We can do that better...
+      @spec = @@spec
     end
+
+    # we need to keep track of:
+    #
+    # 1. Acceptors listening for each command
+    # 2. Processes watching each file
+    # 3. Process hierarchy
+    # 4. ???
 
     def run
-      master = Master.new
-    end
-
-    def dependency_did_change(file_path)
-      master.killall_with_file(file_path)
-    end
-
-
-    def self.define!(&b)
-      @@root = Stage.new("(root)")
-      @@root.instance_eval(&b)
-      @@files = {}
-    end
-
-    def self.pid_has_file(pid, file)
-      @@files[file] ||= []
-      @@files[file] << pid
-    end
-
-    def self.killall_with_file(file)
-      pids = @@files[file]
-      @@process_tree.kill_nodes_with_feature(file)
-    end
-
-    def self.run
       $0 = "zeus master"
-      configure_number_of_file_descriptors
       trap("INT") { exit 0 }
       at_exit { Process.killall_descendants(9) }
 
@@ -52,13 +41,16 @@ module Zeus
 
       $r_pids, $w_pids = IO.pipe
       $w_pids.sync = true
+    end
 
-      @@process_tree = ProcessTree.new
+    def dependency_did_change(file)
+      @process_tree_monitor.kill_nodes_with_feature(file)
+    end
+
+    def self.run
+
       @@root_stage_pid = @@root.run
 
-      lost_files = []
-
-      @@file_watchers = {}
       loop do
         @file_monitor.process_events
 
@@ -75,166 +67,27 @@ module Zeus
 
     end
 
-    class ProcessTree
-      class Node
-        attr_accessor :pid, :children, :features
-        def initialize(pid)
-          @pid, @children, @features = pid, [], {}
-        end
-
-        def add_child(node)
-          self.children << node
-        end
-
-        def add_feature(feature)
-          self.features[feature] = true
-        end
-
-        def has_feature?(feature)
-          self.features[feature] == true
-        end
-
-        def inspect
-          "(#{pid}:#{features.size}:[#{children.map(&:inspect).join(",")}])"
-        end
-
-      end
-
-      def inspect
-        @root.inspect
-      end
-
-      def initialize
-        @root = Node.new(Process.pid)
-        @nodes_by_pid = {Process.pid => @root}
-      end
-
-      def node_for_pid(pid)
-        @nodes_by_pid[pid.to_i] ||= Node.new(pid.to_i)
-      end
-
-      def process_has_parent(pid, ppid)
-        curr = node_for_pid(pid)
-        base = node_for_pid(ppid)
-        base.add_child(curr)
-      end
-
-      def process_has_feature(pid, feature)
-        node = node_for_pid(pid)
-        node.add_feature(feature)
-      end
-
-      def kill_node(node)
-        @nodes_by_pid.delete(node.pid)
-        # recall that this process explicitly traps INT -> exit 0
-        Process.kill("INT", node.pid)
-      end
-
-      def kill_nodes_with_feature(file, base = @root)
-        if base.has_feature?(file)
-          if base == @root.children[0] || base == @root
-            puts "\x1b[31mOne of zeus's dependencies changed. Not killing zeus. You may have to restart the server.\x1b[0m"
-            return false
-          end
-          kill_node(base)
-          return true
-        else
-          base.children.dup.each do |node|
-            if kill_nodes_with_feature(file, node)
-              base.children.delete(node)
-            end
-          end
-          return false
-        end
-      end
-
-    end
-
-    def self.handle_pid_message(data)
+    def handle_pid_message(data)
       data =~ /(\d+):(\d+)/
       pid, ppid = $1.to_i, $2.to_i
-      @@process_tree.process_has_parent(pid, ppid)
+      @process_tree_monitor.process_has_parent(pid, ppid)
     end
 
-    def self.handle_feature_message(data)
+    def handle_feature_message(data)
       data =~ /(\d+):(.*)/
       pid, file = $1.to_i, $2
-      @@process_tree.process_has_feature(pid, file)
-      return if @@file_watchers[file]
-      begin
-        @@file_watchers[file] = true
-        @@queue.watch_file(file.chomp, :write, :extend, :rename, :delete, &method(:notify))
-      # rescue Errno::EMFILE
-      #   exit 1
-      rescue Errno::ENOENT
-        puts "No file found at #{file.chomp}"
-      end
+      @process_tree_monitor.process_has_feature(pid, file)
+      @file_monitor.watch(file)
     end
 
-    class Stage
-      attr_reader :pid
-      def initialize(name)
-        @name = name
-        @stages, @actions = [], []
-      end
-
-      def action(&b)
-        @actions << b
-      end
-
-      def stage(name, &b)
-        @stages << Stage.new(name).tap { |s| s.instance_eval(&b) }
-      end
-
-      def acceptor(name, socket, &b)
-        @stages << Acceptor.new(name, socket, &b)
-      end
-
-      # There are a few things we want to accomplish:
-      # 1. Running all the actions (each time this stage is killed and restarted)
-      # 2. Starting all the substages (and restarting them when necessary)
-      # 3. Starting all the acceptors (and restarting them when necessary)
-      def run
-        @pid = fork {
-          $0 = "zeus spawner: #{@name}"
-          pid = Process.pid
-          $w_pids.puts "#{pid}:#{Process.ppid}\n"
-          puts "\x1b[35m[zeus] starting spawner `#{@name}`\x1b[0m"
-          trap("INT") {
-            puts "\x1b[35m[zeus] killing spawner `#{@name}`\x1b[0m"
-            exit 0
-          }
-
-          @actions.each(&:call)
-
-          $LOADED_FEATURES.each do |f|
-            $w_features.puts "#{pid}:#{f}\n"
-          end
-
-          pids = {}
-          @stages.each do |stage|
-            pids[stage.run] = stage
-          end
-
-          loop do
-            begin
-              pid = Process.wait
-            rescue Errno::ECHILD
-              raise "Stage `#{@name}` has no children. All terminal nodes must be acceptors"
-            end
-            if (status = $?.exitstatus) > 0
-              exit status
-            else # restart the stage that died.
-              stage = pids[pid]
-              pids[stage.run] = stage
-            end
-          end
-
-        }
-      end
-
+    def self.pid_has_file(pid, file)
+      @@files[file] ||= []
+      @@files[file] << pid
     end
 
+
+
+=begin
     class Acceptor
       attr_reader :pid
       def initialize(name, socket, &b)
@@ -285,6 +138,7 @@ module Zeus
       end
 
     end
+=end
 
   end
 end
