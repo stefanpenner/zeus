@@ -18,6 +18,10 @@ module Zeus
       @@definition = Zeus::DSL::Evaluator.new.instance_eval(&b)
     end
 
+    def self.acceptor_names
+      @@definition.acceptor_names
+    end
+
     attr_reader :client_handler, :acceptor_registration_monitor
     def initialize
       @file_monitor                  = FileMonitor.new(&method(:dependency_did_change))
@@ -33,8 +37,24 @@ module Zeus
       @process_tree_monitor.kill_nodes_with_feature(file)
     end
 
+    PID_TYPE = "P"
+    def w_pid line
+      begin
+        @w_msg.send(PID_TYPE + line, 0)
+      rescue Errno::ENOBUFS
+        sleep 0.2
+        retry
+      end
+    end
+
+    FEATURE_TYPE = "F"
     def w_feature line
-      @w_features << line << "\n"
+      begin
+        @w_msg.send(FEATURE_TYPE + line, 0)
+      rescue Errno::ENOBUFS
+        sleep 0.2
+        retry
+      end
     end
 
     def run
@@ -42,19 +62,16 @@ module Zeus
       trap("INT") { exit 0 }
       at_exit { Process.killall_descendants(9) }
 
-      r, w = Socket.pair(:UNIX, :STREAM)
-      @w_features = UNIXSocket.for_fd(w.fileno)
-      @r_features = UNIXSocket.for_fd(r.fileno)
-
-      $r_pids, $w_pids = Socket.pair(:UNIX, :STREAM)
+      @r_msg, @w_msg = Socket.pair(:UNIX, :DGRAM)
 
       # boot the actual app
       @plan.run
+      @w_msg.close
 
       loop do
         @file_monitor.process_events
 
-        datasources = [$r_pids, @r_features,
+        datasources = [@r_msg,
           @acceptor_registration_monitor.datasource, @client_handler.datasource]
 
         # TODO: It would be really nice if we could put the queue poller in the select somehow.
@@ -63,20 +80,38 @@ module Zeus
           rs, _, _ = IO.select(datasources, [], [], 1)
         rescue Errno::EBADF
           puts "EBADF" unless defined?($asdf)
+          sleep 1
           $asdf = true
         end
         rs.each do |r|
           case r
-          when $r_pids     ; handle_pid_message(r.readline)
-          when @r_features ; handle_feature_message(r.readline)
           when @acceptor_registration_monitor.datasource
             @acceptor_registration_monitor.on_datasource_event
+          when @r_msg ; handle_messages
           when @client_handler.datasource
             @client_handler.on_datasource_event
           end
         end if rs
       end
 
+    end
+
+    def handle_messages
+      loop do
+        begin
+          data = @r_msg.recv_nonblock(1024)
+          case data[0]
+          when FEATURE_TYPE
+            handle_feature_message(data[1..-1])
+          when PID_TYPE
+            handle_pid_message(data[1..-1])
+          else
+            raise "Unrecognized message"
+          end
+        rescue Errno::EAGAIN
+          break
+        end
+      end
     end
 
     def handle_pid_message(data)

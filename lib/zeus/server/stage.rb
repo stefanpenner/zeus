@@ -16,7 +16,7 @@ module Zeus
         @pid = fork {
           $0 = "zeus spawner: #{@name}"
           pid = Process.pid
-          $w_pids.puts "#{pid}:#{Process.ppid}\n"
+          @server.w_pid "#{pid}:#{Process.ppid}"
           puts "\x1b[35m[zeus] starting spawner `#{@name}`\x1b[0m"
           trap("INT") {
             puts "\x1b[35m[zeus] killing spawner `#{@name}`\x1b[0m"

@@ -44,7 +44,7 @@ module Zeus
         end
       end
 
-      def handle_server_connection(server)
+      def handle_server_connection
         s_client = @server.accept
         fork { handshake_client_to_acceptor(s_client) }
       end

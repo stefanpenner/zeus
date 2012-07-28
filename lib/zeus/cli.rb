@@ -96,7 +96,6 @@ module Zeus
 
     begin
       require './.zeus.rb'
-=begin TODO: reenable
       Zeus::Server.acceptor_names.each do |name|
         desc name, "#{name} task defined in .zeus.rb"
         define_method(name) {
@@ -104,7 +103,6 @@ module Zeus
           Zeus::Client.run
         }
       end
-=end
     rescue LoadError
     end
 

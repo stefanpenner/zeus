@@ -20,6 +20,13 @@ module Zeus
         @action = b
       end
 
+      # ^ configuration
+      # V later use
+
+      def acceptors
+        self
+      end
+
       def to_domain_object(server)
         Zeus::Server::Acceptor.new(server).tap do |stage|
           stage.name = @name
@@ -51,6 +58,17 @@ module Zeus
       def acceptor(name, socket, &b)
         @stages << DSL::Acceptor.new(name, socket, &b)
         self
+      end
+
+      # ^ configuration
+      # V later use
+
+      def acceptor_names
+        acceptors.map(&:name)
+      end
+
+      def acceptors
+        stages.map(&:acceptors).flatten
       end
 
       def to_domain_object(server)

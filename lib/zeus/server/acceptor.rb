@@ -13,16 +13,12 @@ module Zeus
       end
 
       def register_with_client_handler(pid)
-        puts "OMG"
         a, b = Socket.pair(:UNIX, :STREAM)
         @s_client_handler = UNIXSocket.for_fd(a.fileno)
         @s_acceptor       = UNIXSocket.for_fd(b.fileno)
 
         @s_acceptor.puts registration_data(pid)
 
-        puts ">>>"
-        puts @registration_monitor.acceptor_registration_socket.inspect
-        puts @s_client_handler.inspect
         @registration_monitor.acceptor_registration_socket.send_io(@s_client_handler)
       end
 
@@ -31,7 +27,6 @@ module Zeus
       end
 
       def run
-        puts "RUNNING ACCEPTOR"
         fork {
           register_with_client_handler($$)
           loop do
