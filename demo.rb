@@ -8,23 +8,50 @@ class Master
     @socks = {}
     spawn_acceptor
     listen
+    Process.waitall
   end
 
   def listen
-    server = UNIXServer.new(SERVER_SOCK)
+    begin
+      server = UNIXServer.new(SERVER_SOCK)
+    rescue Errno::EADDRINUSE
+      # Zeus.ui.error "Zeus appears to be already running in this project. If not, remove .zeus.sock and try again."
+    end
+    at_exit { server.close ; File.unlink(SERVER_SOCK) }
     loop do
-      client = server.accept
-      child = fork do
-        client_terminal = client.recv_io
-        arguments = client.readline.chomp
-        pid = @socks.keys.first
-        s, r = @socks.values.first
-        s.send_io(client_terminal)
-        s.puts arguments
-        pid = s.readline.chomp.to_i
-        client << {pid: pid}.to_json << "\n"
+      s_client = server.accept
+      fork do
+        handshake_client_to_acceptor(s_client)
       end
     end
+  end
+
+  # client    master    acceptor
+  #   ---------->                | {command: String, arguments: [String]}
+  #   ---------->                | Terminal IO
+  #             ----------->     | Terminal IO
+  #             ----------->     | Arguments (json array)
+  #             <-----------     | pid
+  #   <---------                 | pid
+  def handshake_client_to_acceptor(s_client)
+    data = JSON.parse(s_client.readline.chomp)
+    command, arguments = data.values_at('command', 'arguments')
+
+    client_terminal = s_client.recv_io
+
+    s_acceptor = find_acceptor_sock(command)
+
+    s_acceptor.send_io(client_terminal)
+
+    s_acceptor.puts arguments.to_json
+
+    pid = s_acceptor.readline.chomp.to_i
+    s_client.puts pid
+  end
+
+  def find_acceptor_sock(command)
+    s, r = @socks.values.first
+    s
   end
 
   def spawn_acceptor
@@ -43,8 +70,7 @@ class Acceptor
     fork {
       loop do
         terminal = @recv.recv_io
-        data = JSON.parse(@recv.readline.chomp)
-        arguments = data['arguments']
+        arguments = JSON.parse(@recv.readline.chomp)
         child = fork do
           @recv << $$ << "\n"
           $stdin.reopen(terminal)
@@ -62,5 +88,4 @@ class Acceptor
 end
 
 
-Master.new.run
-Process.waitall
+__FILE__ == $0 and Master.new.run

@@ -28,12 +28,11 @@ module Zeus
           trap("WINCH") { winch_ << "\0" }
 
           socket = UNIXSocket.new(".zeus.sock")
+          socket << {command: ARGV.shift, arguments: ARGV}.to_json << "\n"
           socket.send_io(slave)
-          socket << {arguments: ARGV}.to_json << "\n"
           slave.close
 
-          resp = JSON.parse(socket.readline.chomp)
-          pid = resp['pid'].to_i
+          pid = socket.readline.chomp.to_i
 
           begin
             buffer = ""
