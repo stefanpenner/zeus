@@ -1,17 +1,12 @@
 require 'socket'
 require 'json'
 
-sock_send, sock_recv = Socket.pair(:UNIX, :STREAM)
-
-
 class Master
   SERVER_SOCK = ".zeus.sock"
 
   def run
     @socks = {}
-
     spawn_server
-
     stuff
   end
 
