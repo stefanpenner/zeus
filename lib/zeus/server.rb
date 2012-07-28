@@ -9,15 +9,19 @@ require 'zeus/server/master'
 require 'zeus/server/acceptor'
 
 module Zeus
-  module Server
+  class Server
 
-    def self.run
-      file_monitor = FileMonitor.new(&method(:dependency_did_change))
+    def initialize
+      @file_monitor = FileMonitor.new(&method(:dependency_did_change))
+      @master = Master.new
+    end
+
+    def run
       master = Master.new
     end
 
-    def self.dependency_did_change(file_path)
-      killall_with_file(file_path)
+    def dependency_did_change(file_path)
+      master.killall_with_file(file_path)
     end
 
 

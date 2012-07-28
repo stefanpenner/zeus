@@ -3,7 +3,7 @@ require 'socket'
 
 # See Zeus::Server::Master for relevant documentation
 module Zeus
-  module Server
+  class Server
     class Acceptor
       def initialize(master)
         @master = master

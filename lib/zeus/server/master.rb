@@ -4,7 +4,7 @@ require 'json'
 require 'zeus/server/acceptor'
 
 module Zeus
-  module Server
+  class Server
     # The model here is kind of convoluted, so here's an explanation of what's
     # happening with all these sockets:
     #
