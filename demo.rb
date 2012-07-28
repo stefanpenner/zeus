@@ -8,6 +8,7 @@ class Master
     s, r = Socket.pair(:UNIX, :STREAM)
     @reg_master   = UNIXSocket.for_fd(s.fileno)
     @reg_acceptor = UNIXSocket.for_fd(r.fileno)
+    @acceptors = []
   end
 
   def run
@@ -38,42 +39,59 @@ class Master
 
   def handle_registration
     io = @reg_master.recv_io
-    pid = io.readline.chomp.to_i
     sock = UNIXSocket.for_fd(io.fileno)
-    @socks[pid] = sock
+
+    data = JSON.parse(io.readline.chomp)
+    pid         = data['pid'].to_i
+    commands    = data['commands']
+    description = data['description']
+
+    @acceptors << AcceptorStub.new(pid, sock, commands, description)
   end
+
+  AcceptorStub = Struct.new(:pid, :socket, :commands, :description)
 
   def handle_server_connection(server)
     s_client = server.accept
     fork { handshake_client_to_acceptor(s_client) }
   end
 
-  # client    master    acceptor
-  #   ---------->                | {command: String, arguments: [String]}
-  #   ---------->                | Terminal IO
-  #             ----------->     | Terminal IO
-  #             ----------->     | Arguments (json array)
-  #             <-----------     | pid
-  #   <---------                 | pid
+  #  client    master    acceptor
+  # 1  ---------->                | {command: String, arguments: [String]}
+  # 2  ---------->                | Terminal IO
+  # 3            ----------->     | Terminal IO
+  # 4            ----------->     | Arguments (json array)
+  # 5            <-----------     | pid
+  # 6  <---------                 | pid
   def handshake_client_to_acceptor(s_client)
+    # 1
     data = JSON.parse(s_client.readline.chomp)
     command, arguments = data.values_at('command', 'arguments')
 
+    # 2
     client_terminal = s_client.recv_io
 
-    s_acceptor = find_acceptor_sock(command)
+    # 3
+    acceptor = find_acceptor_for_command(command)
+    # TODO handle nothing found
+    acceptor.socket.send_io(client_terminal)
 
-    s_acceptor.send_io(client_terminal)
+    puts "accepting connection for #{command}"
 
-    s_acceptor.puts arguments.to_json
+    # 4
+    acceptor.socket.puts arguments.to_json
 
-    pid = s_acceptor.readline.chomp.to_i
+    # 5
+    pid = acceptor.socket.readline.chomp.to_i
+
+    # 6
     s_client.puts pid
   end
 
-  def find_acceptor_sock(command)
-    # TODO lookup command
-    @socks.values.first
+  def find_acceptor_for_command(command)
+    @acceptors.detect { |acceptor|
+      acceptor.commands.include?(command)
+    }
   end
 
   def acceptor_registration_socket
@@ -98,8 +116,14 @@ class Acceptor
     a, b = Socket.pair(:UNIX, :STREAM)
     @s_master = UNIXSocket.for_fd(a.fileno)
     @s_acceptor = UNIXSocket.for_fd(b.fileno)
-    @s_acceptor.puts "#{pid}\n"
+
+    @s_acceptor.puts registration_data(pid)
+
     @master.acceptor_registration_socket.send_io(@s_master)
+  end
+
+  def registration_data(pid)
+    {pid: pid, commands: ['console', 'c'], description: "start a rails console"}.to_json
   end
 
   def run
