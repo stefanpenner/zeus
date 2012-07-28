@@ -20,7 +20,7 @@ module Zeus
       end
     end
 
-    def self.run
+    def self.run(command, args)
       maybe_raw do
         PTY.open do |master, slave|
           $stdout.tty? and master.winsize = $stdout.winsize
@@ -28,7 +28,7 @@ module Zeus
           trap("WINCH") { winch_ << "\0" }
 
           socket = UNIXSocket.new(".zeus.sock")
-          socket << {command: ARGV.shift, arguments: ARGV}.to_json << "\n"
+          socket << {command: command, arguments: args}.to_json << "\n"
           socket.send_io(slave)
           slave.close
 
