@@ -33,16 +33,20 @@ module Zeus
       @process_tree_monitor.kill_nodes_with_feature(file)
     end
 
+    def w_feature line
+      @w_features << line << "\n"
+    end
+
     def run
       $0 = "zeus master"
       trap("INT") { exit 0 }
       at_exit { Process.killall_descendants(9) }
 
-      $r_features, $w_features = IO.pipe
-      $w_features.sync = true
+      r, w = Socket.pair(:UNIX, :STREAM)
+      @w_features = UNIXSocket.for_fd(w.fileno)
+      @r_features = UNIXSocket.for_fd(r.fileno)
 
-      $r_pids, $w_pids = IO.pipe
-      $w_pids.sync = true
+      $r_pids, $w_pids = Socket.pair(:UNIX, :STREAM)
 
       # boot the actual app
       @plan.run
@@ -50,7 +54,8 @@ module Zeus
       loop do
         @file_monitor.process_events
 
-        datasources = [$r_pids, $r_features, @acceptor_registration_monitor.datasource, @client_handler.datasource]
+        datasources = [$r_pids, @r_features,
+          @acceptor_registration_monitor.datasource, @client_handler.datasource]
 
         # TODO: It would be really nice if we could put the queue poller in the select somehow.
         #   --investigate kqueue. Is this possible?
@@ -63,7 +68,7 @@ module Zeus
         rs.each do |r|
           case r
           when $r_pids     ; handle_pid_message(r.readline)
-          when $r_features ; handle_feature_message(r.readline)
+          when @r_features ; handle_feature_message(r.readline)
           when @acceptor_registration_monitor.datasource
             @acceptor_registration_monitor.on_datasource_event
           when @client_handler.datasource

@@ -25,13 +25,13 @@ module Zeus
 
           @actions.each(&:call)
 
-          $LOADED_FEATURES.each do |f|
-            $w_features.puts "#{pid}:#{f}\n"
-          end
-
           pids = {}
           @stages.each do |stage|
             pids[stage.run] = stage
+          end
+
+          $LOADED_FEATURES.each do |f|
+            @server.w_feature "#{pid}:#{f}"
           end
 
           loop do

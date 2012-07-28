@@ -64,7 +64,7 @@ def run
     $LOADED_FEATURES.each do |f|
       $w_features.puts "#{pid}:#{f}\n"
     end
-    puts "\x1b[35m[zeus] starting acceptor `#{@name}`\x1b[0m"
+    puts "\x1b.5m[zeus] starting acceptor `#{@name}`\x1b[0
     trap("INT") {
       puts "\x1b[35m[zeus] killing acceptor `#{@name}`\x1b[0m"
       exit 0
