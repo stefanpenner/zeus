@@ -23,9 +23,10 @@ class Master
         client_terminal = client.recv_io
         arguments = JSON.load(client.gets.strip)
         pid = @socks.keys.first
-        client << {pid: $$}.to_json << "\n"
         s, r = @socks.values.first
         s.send_io(client_terminal)
+        pid = s.readline.chomp.to_i
+        client << {pid: pid}.to_json << "\n"
       end
     end
   end
@@ -47,6 +48,7 @@ class Acceptor
       loop do
         terminal = @recv.recv_io
         child = fork do
+          @recv << $$ << "\n"
           $stdin.reopen(terminal)
           $stdout.reopen(terminal)
           $stderr.reopen(terminal)

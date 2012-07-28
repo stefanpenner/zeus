@@ -48,6 +48,7 @@ module Zeus
               if ready.include?($stdin)
                 input = $stdin.readpartial(4096, buffer)
                 input.scan(SIGNAL_REGEX).each { |signal|
+                  puts "killing #{pid.inspect}"
                   Process.kill(SIGNALS[signal], pid)
                 }
                 master << input
