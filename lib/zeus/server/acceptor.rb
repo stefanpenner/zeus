@@ -67,13 +67,13 @@ module Zeus
       end
 
       def prefork_action! # TODO : refactor
-        # ActiveRecord::Base.clear_all_connections!
+        ActiveRecord::Base.clear_all_connections!
       end
 
       def postfork_action! # TODO :refactor
-        # ActiveRecord::Base.establish_connection
-        # ActiveSupport::DescendantsTracker.clear
-        # ActiveSupport::Dependencies.clear
+        ActiveRecord::Base.establish_connection
+        ActiveSupport::DescendantsTracker.clear
+        ActiveSupport::Dependencies.clear
       end
 
     end

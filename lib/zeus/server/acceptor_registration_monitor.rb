@@ -24,6 +24,7 @@ module Zeus
         commands    = data['commands']
         description = data['description']
 
+        @acceptors.reject!{|ac|ac.commands == commands}
         @acceptors << AcceptorStub.new(pid, io, commands, description)
       end
 
