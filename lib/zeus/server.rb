@@ -27,7 +27,7 @@ module Zeus
       @file_monitor                  = FileMonitor.new(&method(:dependency_did_change))
       @acceptor_registration_monitor = AcceptorRegistrationMonitor.new
       @process_tree_monitor          = ProcessTreeMonitor.new
-      @client_handler                = ClientHandler.new
+      @client_handler                = ClientHandler.new(acceptor_registration_monitor)
 
       # TODO: deprecate Zeus::Server.define! maybe. We can do that better...
       @plan = @@definition.to_domain_object(self)

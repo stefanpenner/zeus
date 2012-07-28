@@ -31,7 +31,8 @@ module Zeus
       def datasource ; @server ; end
       def on_datasource_event ; handle_server_connection ; end
 
-      def initialize
+      def initialize(registration_monitor)
+        @reg_monitor = registration_monitor
         begin
           @server = UNIXServer.new(SERVER_SOCK)
           @server.listen(10)
@@ -65,7 +66,7 @@ module Zeus
         client_terminal = s_client.recv_io
 
         # 3
-        acceptor = find_acceptor_for_command(command)
+        acceptor = @reg_monitor.find_acceptor_for_command(command)
         # TODO handle nothing found
         acceptor.socket.send_io(client_terminal)
 
