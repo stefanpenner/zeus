@@ -1,6 +1,26 @@
 require 'socket'
 require 'json'
 
+# The model here is kind of convoluted, so here's an explanation of what's
+# happening with all these sockets:
+#
+# #### Acceptor Registration
+# 1. Master creates a socketpair for Acceptor registration (S_REG)
+# 2. When an acceptor is spawned, it:
+#   1. Creates a new socketpair for communication with master (S_ACC)
+#   2. Sends one side of S_ACC over S_REG to master.
+#   3. Sends a JSON-encoded hash of `pid`, `commands`, and `description`. over S_REG.
+# 3. Master received first the IO and then the JSON hash, and stores them for later reference.
+#
+# #### Running a command
+# 1. Master has a UNIXServer (SVR) listening.
+# 2. Master has a socketpair with the acceptor referenced by the command (see Registration) (S_ACC)
+# 3. When master received a connection (S_CLI) on SVR:
+#   1. Master sends S_CLI over S_ACC, so the acceptor can communicate with the server's client.
+#   2. Master sends a JSON-encoded array of `arguments` over S_ACC
+#   3. Acceptor sends the newly-forked worker PID over S_ACC to master.
+#   4. Master forwards the pid to the client over S_CLI.
+#
 class Master
   SERVER_SOCK = ".zeus.sock"
 
