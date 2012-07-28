@@ -6,11 +6,11 @@ class Master
 
   def run
     @socks = {}
-    spawn_server
-    stuff
+    spawn_acceptor
+    listen
   end
 
-  def stuff
+  def listen
     server = UNIXServer.new(SERVER_SOCK)
     loop do
       client = server.accept
@@ -27,7 +27,7 @@ class Master
     end
   end
 
-  def spawn_server
+  def spawn_acceptor
     s, r = UNIXSocket.pair(:STREAM)
     pid = Acceptor.new(s,r).run
     @socks[pid] = [s,r]
