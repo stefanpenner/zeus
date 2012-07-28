@@ -6,7 +6,7 @@ module Zeus
   class Server
     class Acceptor
 
-      attr_accessor :name, :command, :action
+      attr_accessor :name, :aliases, :description, :action
       def initialize(server)
         @server = server
         @client_handler = server.client_handler
@@ -24,7 +24,7 @@ module Zeus
       end
 
       def registration_data(pid)
-        {pid: pid, commands: [command], description: "start a rails console"}.to_json
+        {pid: pid, commands: [name, *aliases], description: description}.to_json
       end
 
       def run

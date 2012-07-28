@@ -96,12 +96,13 @@ module Zeus
 
     begin
       require './.zeus.rb'
-      Zeus::Server.acceptor_names.each do |name|
-        desc name, "#{name} task defined in .zeus.rb"
-        define_method(name) {
+      Zeus::Server.acceptors.each do |acc|
+        desc acc.name, (acc.description || "#{acc.name} task defined in .zeus.rb")
+        define_method(acc.name) {
           require 'zeus/client'
           Zeus::Client.run
         }
+        acc.aliases.each {|a| map a => acc.name }
       end
     rescue LoadError
     end

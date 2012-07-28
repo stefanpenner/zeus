@@ -13,10 +13,11 @@ module Zeus
 
     class Acceptor
 
-      attr_reader :name, :command, :action
-      def initialize(name, command, &b)
+      attr_reader :name, :aliases, :description, :action
+      def initialize(name, aliases, description, &b)
         @name = name
-        @command = command
+        @description = description
+        @aliases = aliases
         @action = b
       end
 
@@ -30,8 +31,9 @@ module Zeus
       def to_domain_object(server)
         Zeus::Server::Acceptor.new(server).tap do |stage|
           stage.name = @name
-          stage.command = @command
+          stage.aliases = @aliases
           stage.action = @action
+          stage.description = @description
         end
       end
 
@@ -50,22 +52,23 @@ module Zeus
         self
       end
 
+      def desc(desc)
+        @desc = desc
+      end
+
       def stage(name, &b)
         @stages << DSL::Stage.new(name).tap { |s| s.instance_eval(&b) }
         self
       end
 
-      def acceptor(name, socket, &b)
-        @stages << DSL::Acceptor.new(name, socket, &b)
+      def command(name, *aliases, &b)
+        @stages << DSL::Acceptor.new(name, aliases, @desc, &b)
+        @desc = nil
         self
       end
 
       # ^ configuration
       # V later use
-
-      def acceptor_names
-        acceptors.map(&:name)
-      end
 
       def acceptors
         stages.map(&:acceptors).flatten

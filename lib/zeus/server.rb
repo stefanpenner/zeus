@@ -18,8 +18,8 @@ module Zeus
       @@definition = Zeus::DSL::Evaluator.new.instance_eval(&b)
     end
 
-    def self.acceptor_names
-      @@definition.acceptor_names
+    def self.acceptors
+      @@definition.acceptors
     end
 
     attr_reader :client_handler, :acceptor_registration_monitor
