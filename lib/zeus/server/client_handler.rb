@@ -61,11 +61,9 @@ module Zeus
         # 1
         data = JSON.parse(s_client.readline.chomp)
         command, arguments = data.values_at('command', 'arguments')
-        puts [command, arguments].inspect
 
         # 2
         client_terminal = s_client.recv_io
-        puts client_terminal.inspect
 
         # 3
         acceptor = @reg_monitor.find_acceptor_for_command(command)

@@ -18,8 +18,6 @@ module Zeus
         @s_client_handler = UNIXSocket.for_fd(@a.fileno)
         @s_acceptor       = UNIXSocket.for_fd(@b.fileno)
 
-        puts [@a, @b].inspect
-
         @s_acceptor.puts registration_data(pid)
 
         @registration_monitor.acceptor_registration_socket.send_io(@s_client_handler)
@@ -38,7 +36,7 @@ module Zeus
 
           @server.w_pid "#{pid}:#{Process.ppid}"
 
-          puts "\x1b[35m[zeus] starting acceptor `#{@name}`\x1b[0"
+          puts "\x1b[35m[zeus] starting acceptor `#{@name}`\x1b[0m"
           trap("INT") {
             puts "\x1b[35m[zeus] killing acceptor `#{@name}`\x1b[0m"
             exit 0
@@ -47,7 +45,6 @@ module Zeus
           $LOADED_FEATURES.each do |f|
             @server.w_feature "#{pid}:#{f}"
           end
-          puts "FINALLY DONE"
 
           loop do
             prefork_action!
