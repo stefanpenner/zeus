@@ -18,14 +18,13 @@ module Zeus
 
       def handle_registration
         io = @reg_monitor.recv_io
-        sock = UNIXSocket.for_fd(io.fileno)
 
         data = JSON.parse(io.readline.chomp)
         pid         = data['pid'].to_i
         commands    = data['commands']
         description = data['description']
 
-        @acceptors << AcceptorStub.new(pid, sock, commands, description)
+        @acceptors << AcceptorStub.new(pid, io, commands, description)
       end
 
       def find_acceptor_for_command(command)

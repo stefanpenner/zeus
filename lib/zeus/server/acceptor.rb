@@ -8,14 +8,17 @@ module Zeus
 
       attr_accessor :name, :command, :action
       def initialize(server)
+        @server = server
         @client_handler = server.client_handler
         @registration_monitor = server.acceptor_registration_monitor
       end
 
       def register_with_client_handler(pid)
-        a, b = Socket.pair(:UNIX, :STREAM)
-        @s_client_handler = UNIXSocket.for_fd(a.fileno)
-        @s_acceptor       = UNIXSocket.for_fd(b.fileno)
+        @a, @b = Socket.pair(:UNIX, :STREAM)
+        @s_client_handler = UNIXSocket.for_fd(@a.fileno)
+        @s_acceptor       = UNIXSocket.for_fd(@b.fileno)
+
+        puts [@a, @b].inspect
 
         @s_acceptor.puts registration_data(pid)
 
@@ -28,67 +31,55 @@ module Zeus
 
       def run
         fork {
-          register_with_client_handler($$)
+          $0 = "zeus acceptor: #{@name}"
+          pid = Process.pid
+
+          register_with_client_handler(pid)
+
+          @server.w_pid "#{pid}:#{Process.ppid}"
+
+          puts "\x1b[35m[zeus] starting acceptor `#{@name}`\x1b[0"
+          trap("INT") {
+            puts "\x1b[35m[zeus] killing acceptor `#{@name}`\x1b[0m"
+            exit 0
+          }
+
+          $LOADED_FEATURES.each do |f|
+            @server.w_feature "#{pid}:#{f}"
+          end
+          puts "FINALLY DONE"
+
           loop do
+            prefork_action!
             terminal = @s_acceptor.recv_io
             arguments = JSON.parse(@s_acceptor.readline.chomp)
             child = fork do
+              postfork_action!
               @s_acceptor << $$ << "\n"
               $stdin.reopen(terminal)
               $stdout.reopen(terminal)
               $stderr.reopen(terminal)
               ARGV.replace(arguments)
 
-              exec("htop")
+              @action.call
             end
             Process.detach(child)
             terminal.close
           end
         }
       end
+
+      def prefork_action! # TODO : refactor
+        # ActiveRecord::Base.clear_all_connections!
+      end
+
+      def postfork_action! # TODO :refactor
+        # ActiveRecord::Base.establish_connection
+        # ActiveSupport::DescendantsTracker.clear
+        # ActiveSupport::Dependencies.clear
+      end
+
     end
   end
-end
-
-__END__
-def run
-  @pid = fork {
-    $0 = "zeus acceptor: #{@name}"
-    pid = Process.pid
-    $w_pids.puts "#{pid}:#{Process.ppid}\n"
-    $LOADED_FEATURES.each do |f|
-      $w_features.puts "#{pid}:#{f}\n"
-    end
-    puts "\x1b.5m[zeus] starting acceptor `#{@name}`\x1b[0
-    trap("INT") {
-      puts "\x1b[35m[zeus] killing acceptor `#{@name}`\x1b[0m"
-      exit 0
-    }
-
-    File.unlink(@socket) rescue nil
-    server = UNIXServer.new(@socket)
-    loop do
-      ActiveRecord::Base.clear_all_connections! # TODO : refactor
-      client = server.accept
-      child = fork do
-        ActiveRecord::Base.establish_connection # TODO :refactor
-        ActiveSupport::DescendantsTracker.clear
-        ActiveSupport::Dependencies.clear
-
-        terminal = client.recv_io
-        arguments = JSON.load(client.gets.strip)
-
-        client << $$ << "\n"
-        $stdin.reopen(terminal)
-        $stdout.reopen(terminal)
-        $stderr.reopen(terminal)
-        ARGV.replace(arguments)
-
-        @action.call
-      end
-      Process.detach(child)
-      client.close
-    end
-  }
 end
 
