@@ -35,14 +35,16 @@ module Zeus
     D
     def start
       require 'zeus/server'
-      begin
-        require './.zeus.rb'
-      rescue LoadError
-        Zeus.ui.error("Your project is missing a config file (.zeus.rb), or you are not\n"\
-          "in the project root. You can run `zeus init` to generate a config file.")
-        exit 1
-      end
+      load_zeus_file!
       Zeus::Server.new.run
+    end
+
+    def load_zeus_file!
+      require './.zeus.rb'
+    rescue LoadError
+      Zeus.ui.error("Your project is missing a config file (.zeus.rb), or you are not\n"\
+        "in the project root. You can run `zeus init` to generate a config file.")
+      exit 1
     end
 
     def help(*)
@@ -55,17 +57,14 @@ module Zeus
     end
     map %w(-v --version) => :version
 
-    begin
-      require './.zeus.rb'
-      Zeus::Server.acceptors.each do |acc|
-        desc acc.name, (acc.description || "#{acc.name} task defined in .zeus.rb")
-        define_method(acc.name) { |*args|
-          require 'zeus/client'
-          Zeus::Client.run(acc.name, args)
-        }
-        map acc.aliases => acc.name
-      end
-    rescue LoadError
+    load_zeus_file!
+    Zeus::Server.acceptors.each do |acc|
+      desc acc.name, (acc.description || "#{acc.name} task defined in .zeus.rb")
+      define_method(acc.name) { |*args|
+        require 'zeus/client'
+        Zeus::Client.run(acc.name, args)
+      }
+      map acc.aliases => acc.name
     end
 
   end
